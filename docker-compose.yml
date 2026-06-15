@@ -1,35 +1,35 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16
+    container_name: capsuliki-postgres
     environment:
-      POSTGRES_DB: tonket
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: capsuliki
+      POSTGRES_USER: capsuliki
+      POSTGRES_PASSWORD: capsuliki
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - capsuliki_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tonket"]
+      test: ["CMD-SHELL", "pg_isready -U capsuliki -d capsuliki"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  app:
-    build: .
-    env_file:
-      - .env
-    environment:
-      PORT: 8080
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tonket
-      ALLOW_DEV_AUTH: "true"
-      PUBLIC_APP_URL: http://localhost:8080
-      CORS_ORIGIN: http://localhost:8080,http://localhost:5173
+  redis:
+    image: redis:7-alpine
+    container_name: capsuliki-redis
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - "6379:6379"
+    volumes:
+      - capsuliki_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
-  postgres_data:
+  capsuliki_pg_data:
+  capsuliki_redis_data:
