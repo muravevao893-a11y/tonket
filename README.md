@@ -62,3 +62,19 @@ https://your-domain.up.railway.app/ready
 2. The URL must be HTTPS.
 3. `PUBLIC_APP_URL` and `CORS_ORIGIN` must match the same Railway domain.
 4. If Telegram still shows old UI, change the URL query once, for example `https://your-domain.up.railway.app/?v=2`, because Telegram clients cache web apps aggressively.
+
+## Hotfix 1.2.3 — Railway TypeScript URL build fix
+
+Railway build could fail with:
+
+```text
+src/App.tsx(14,33): error TS2322: Type 'string' is not assignable to type '`${string}://${string}`'.
+```
+
+Fixed in `apps/web/src/App.tsx` by returning a typed absolute URL for TonConnect `manifestUrl` and `actionsConfiguration.twaReturnUrl`.
+
+Deploy again after pushing this version. If Telegram still shows an old build, change the Mini App URL in BotFather to include a cache-busting query, for example:
+
+```text
+https://your-app.up.railway.app/?v=typesafe1
+```
