@@ -1,147 +1,76 @@
-# TONKET Railway Candles Ready
+# TONKET — Railway + Telegram frontend gray-screen hotfix
 
-TONKET is a Telegram Mini App / Web3 meme-pad skeleton for TON with PostgreSQL, Telegram auth, TonConnect, Jetton deploy adapter, bonding curve trading, and now real backend-driven candlestick charts.
+Этот архив — hotfix поверх `tonket-candles-ready`.
 
-## What is new in 1.2.0
+Что исправлено:
 
-- Added `trade_candles` PostgreSQL table for OHLCV candles.
-- Added candle aggregation on every confirmed trade.
-- Added backend endpoints:
-  - `GET /api/tokens/:id/candles?interval=1m&limit=350`
-  - `GET /api/tokens/:id/tick`
-- Added production React component: `apps/web/src/components/LiveCandleChart.tsx`.
-- Added mobile token detail sheet with chart, timeframe selector, OHLC readout, fit button, buy/sell panel.
-- Added `lightweight-charts` from TradingView.
-- No mock candle data: chart reads confirmed trades and live price from backend.
+- Добавлен официальный Telegram WebApp script в `apps/web/index.html`:
+  `https://telegram.org/js/telegram-web-app.js`
+- Добавлен React ErrorBoundary. Если фронт падает, Mini App теперь показывает ошибку, а не серый экран.
+- Добавлен boot diagnostics экран: `/health`, `/ready`, Telegram WebApp object, initData, origin.
+- API-клиент теперь явно ловит ситуацию, когда backend вместо JSON возвращает HTML `index.html`.
+- Добавлен timeout API-запросов.
+- React переведен на стабильную ветку `18.3.1`, чтобы снизить риск конфликтов с WebView/TonConnect.
+- Исправлен stale-state баг при синхронизации кошелька.
 
-## Local launch
+## Локальный запуск
 
 ```bash
 cp .env.example .env
 ```
 
-For local browser testing without Telegram, set:
+Для локального браузера поставь:
 
 ```env
 ALLOW_DEV_AUTH=true
 ```
 
-Then run with Docker:
+Запуск:
 
 ```bash
 docker compose up --build
 ```
 
-Open:
+Открыть:
 
 ```text
 http://localhost:8080
 ```
 
-Or run manually:
+## Railway
 
-```bash
-npm install
-npm run build
-npm run start
-```
-
-## Railway deploy
-
-Railway should use the root project.
-
-Required variables:
+Обязательные переменные:
 
 ```env
 NODE_ENV=production
 DATABASE_URL=${{Postgres.DATABASE_URL}}
-APP_SECRET=your_long_random_secret
-TELEGRAM_BOT_TOKEN=your_bot_token
-PUBLIC_APP_URL=https://your-domain.up.railway.app
-CORS_ORIGIN=https://your-domain.up.railway.app
+APP_SECRET=длинный_секрет_минимум_32_символа
+TELEGRAM_BOT_TOKEN=токен_бота
+PUBLIC_APP_URL=https://твой-домен.up.railway.app
+CORS_ORIGIN=https://твой-домен.up.railway.app
 ALLOW_DEV_AUTH=false
 TON_NETWORK=mainnet
-PLATFORM_TON_ADDRESS=UQ_or_EQ_platform_address
-PLATFORM_ADMIN_TON_ADDRESS=UQ_or_EQ_admin_address
+PLATFORM_TON_ADDRESS=UQ_или_EQ_адрес
+PLATFORM_ADMIN_TON_ADDRESS=UQ_или_EQ_адрес
 PLATFORM_FEE_BPS=100
-JETTON_METADATA_BASE_URL=https://your-domain.up.railway.app/api/jetton/metadata
+JETTON_METADATA_BASE_URL=https://твой-домен.up.railway.app/api/jetton/metadata
 ```
 
-Optional Jetton deploy config:
-
-```env
-JETTON_MASTER_CODE_BOC_BASE64=...
-JETTON_WALLET_CODE_BOC_BASE64=...
-```
-
-Healthchecks:
+После деплоя проверь:
 
 ```text
-/health  - liveness, does not depend on DB
-/ready   - DB and migration readiness
+https://твой-домен.up.railway.app/health
+https://твой-домен.up.railway.app/ready
 ```
 
-## Candle API
+Если `/health` зелёный, а `/ready` красный — фронт живой, проблема в PostgreSQL/env.
 
-### Get historical candles
+## Важно для Telegram Mini App
 
-```http
-GET /api/tokens/:id/candles?interval=1m&limit=350
-Authorization: Bearer <sessionToken>
-```
-
-Response:
-
-```json
-{
-  "interval": "1m",
-  "limit": 350,
-  "candles": [
-    { "time": 1781491200, "open": 0.001, "high": 0.0012, "low": 0.0009, "close": 0.0011, "volumeTon": "12.4", "volumeTokenAtomic": "100000000000", "tradesCount": 3 }
-  ]
-}
-```
-
-### Get live tick
-
-```http
-GET /api/tokens/:id/tick
-Authorization: Bearer <sessionToken>
-```
-
-Response:
-
-```json
-{
-  "tick": { "time": 1781491201, "price": 0.0011, "priceTon": "0.0011" }
-}
-```
-
-## Component
-
-Main component:
+В BotFather нужно указать Web App URL именно на Railway-домен:
 
 ```text
-apps/web/src/components/LiveCandleChart.tsx
+https://твой-домен.up.railway.app
 ```
 
-Props:
-
-```ts
-historicalData: Array<{ time: number | string; open: number; high: number; low: number; close: number }>;
-liveTick: { time: number | string; price: number } | null;
-```
-
-The component creates the TradingView chart once, uses `setData()` only for historical candles, and uses `update()` for incoming live ticks.
-
-## Verification performed
-
-```text
-✅ npm install --package-lock=false --ignore-scripts
-✅ npm run build
-✅ node --check apps/api/src/server.js
-✅ node --check apps/api/src/services/candles.js
-✅ npm run test:curve
-```
-
-Note: local Node was v22, while Railway/Docker uses Node 20 as configured in `package.json` and Dockerfile.
+Открывать нужно через кнопку Mini App/бота. Если просто вставить ссылку в браузер Telegram, `initData` может не прийти.

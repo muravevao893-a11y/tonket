@@ -1,11 +1,20 @@
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import MainScreen from './components/MainScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+function getManifestUrl() {
+  return `${window.location.origin}/tonconnect-manifest.json`;
+}
 
 export default function App() {
-  const manifestUrl = `${window.location.origin}/tonconnect-manifest.json`;
   return (
-    <TonConnectUIProvider manifestUrl={manifestUrl} actionsConfiguration={{ twaReturnUrl: 'https://t.me' }}>
-      <MainScreen />
-    </TonConnectUIProvider>
+    <ErrorBoundary>
+      <TonConnectUIProvider
+        manifestUrl={getManifestUrl()}
+        actionsConfiguration={{ twaReturnUrl: window.location.origin }}
+      >
+        <MainScreen />
+      </TonConnectUIProvider>
+    </ErrorBoundary>
   );
 }

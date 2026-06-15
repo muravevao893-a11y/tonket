@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TonConnectButton, useTonAddress, useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import type { BootstrapPayload, TokenItem } from '../types/app';
-import { activateToken, authTelegram, clearSessionToken, confirmDeploy, confirmTrade, connectWallet, createToken, fetchBootstrap, getSessionToken, prepareTrade, type CreateTokenInput } from '../lib/api';
+import { activateToken, authTelegram, clearSessionToken, confirmDeploy, confirmTrade, connectWallet, createToken, fetchBootstrap, fetchHealth, fetchReady, getSessionToken, prepareTrade, type CreateTokenInput } from '../lib/api';
 import { HomeIcon, PlusIcon, ProfileIcon, RocketIcon, SearchIcon, TonLogo } from './icons';
 import { Button, cn, haptic, shortAddress, StatPill, StatusBadge } from './ui';
 import { TokenDetailSheet } from './TokenDetailSheet';
@@ -195,6 +195,8 @@ export default function MainScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<string | null>(null);
   const [buyToken, setBuyToken] = useState<TokenItem | null>(null);
   const [detailToken, setDetailToken] = useState<TokenItem | null>(null);
 
@@ -202,6 +204,7 @@ export default function MainScreen() {
   const tgInitData = window.Telegram?.WebApp?.initData || '';
 
   function showToast(type: NonNullable<Toast>['type'], text: string) {
+    if (type === 'error') console.error('[TONKET toast error]', text);
     setToast({ type, text });
     window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(type === 'error' ? 'error' : 'success');
     window.setTimeout(() => setToast(null), 4200);
@@ -210,6 +213,23 @@ export default function MainScreen() {
   async function load() {
     const bootstrap = await fetchBootstrap();
     setData(bootstrap);
+    setBootError(null);
+  }
+
+  async function runDiagnostics() {
+    setDiagnostics('Checking /health and /ready…');
+    try {
+      const [health, ready] = await Promise.allSettled([fetchHealth(), fetchReady()]);
+      setDiagnostics(JSON.stringify({
+        origin: window.location.origin,
+        hasTelegramWebApp: Boolean(window.Telegram?.WebApp),
+        hasInitData: Boolean(window.Telegram?.WebApp?.initData),
+        health: health.status === 'fulfilled' ? health.value : { error: health.reason instanceof Error ? health.reason.message : String(health.reason) },
+        ready: ready.status === 'fulfilled' ? ready.value : { error: ready.reason instanceof Error ? ready.reason.message : String(ready.reason) },
+      }, null, 2));
+    } catch (error) {
+      setDiagnostics(error instanceof Error ? error.message : String(error));
+    }
   }
 
   useEffect(() => {
@@ -226,7 +246,9 @@ export default function MainScreen() {
           await authTelegram(tgInitData);
           await load();
         } catch (inner) {
-          showToast('error', inner instanceof Error ? inner.message : 'Auth failed');
+          const message = inner instanceof Error ? inner.message : 'Auth failed';
+          setBootError(message);
+          showToast('error', message);
         }
       } finally {
         setLoading(false);
@@ -244,7 +266,7 @@ export default function MainScreen() {
           network: wallet.account.chain ? String(wallet.account.chain) : data.config.tonNetwork,
           publicKey: wallet.account.publicKey,
         });
-        setData({ ...data, me: { ...data.me, wallet: response.wallet } });
+        setData((current) => current ? { ...current, me: { ...current.me, wallet: response.wallet } } : current);
       } catch (error) {
         showToast('error', error instanceof Error ? error.message : 'Wallet sync failed');
       }
@@ -358,9 +380,31 @@ export default function MainScreen() {
           {loading && <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5 text-sm font-bold text-slate-400">Loading real backend data…</div>}
 
           {!loading && !data && (
-            <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 text-sm text-amber-100">
-              <h2 className="text-lg font-black text-white">Telegram auth required</h2>
-              <p className="mt-2 text-amber-100/80">Open this inside Telegram Mini App or enable ALLOW_DEV_AUTH=true locally. Без аккаунта Telegram я не буду рисовать тебе фейковые миллионы, у нас тут приличная шарага.</p>
+            <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 text-sm text-amber-100 shadow-card">
+              <div className="text-4xl">🛠️</div>
+              <h2 className="mt-3 text-lg font-black text-white">Mini App did not boot</h2>
+              <p className="mt-2 text-amber-100/80">
+                Это уже не серый экран: фронт загрузился, но не смог пройти Telegram/backend auth. Чаще всего причина — Mini App открыт не через Telegram WebApp-кнопку, не добавлен Telegram script, или Railway /ready красный.
+              </p>
+              {bootError && (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Boot error</p>
+                  <pre className="mt-2 whitespace-pre-wrap break-words text-xs font-semibold text-amber-50">{bootError}</pre>
+                </div>
+              )}
+              <div className="mt-4 grid gap-2 text-xs text-amber-100/80">
+                <p>Telegram WebApp object: <b>{window.Telegram?.WebApp ? 'yes' : 'no'}</b></p>
+                <p>initData received: <b>{window.Telegram?.WebApp?.initData ? 'yes' : 'no'}</b></p>
+                <p>Origin: <b>{window.location.origin}</b></p>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button type="button" onClick={runDiagnostics} className="rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black text-white transition-all hover:bg-blue-500 active:scale-95">Run diagnostics</button>
+                <button type="button" onClick={() => window.location.reload()} className="rounded-2xl bg-slate-800 px-4 py-3 text-xs font-black text-slate-100 transition-all hover:bg-slate-700 active:scale-95">Reload</button>
+              </div>
+              {diagnostics && (
+                <pre className="mt-4 max-h-80 overflow-auto rounded-2xl border border-white/10 bg-black/30 p-3 text-[11px] text-slate-100">{diagnostics}</pre>
+              )}
+              <p className="mt-4 text-xs text-amber-100/70">Для локального запуска поставь <b>ALLOW_DEV_AUTH=true</b>. Для Telegram — открывай именно как Mini App из бота, не просто ссылкой в браузере.</p>
             </div>
           )}
 

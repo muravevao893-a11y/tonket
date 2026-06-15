@@ -163,7 +163,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     name: 'TONKET',
-    version: '1.2.0-candles',
+    version: '1.2.1-grayfix',
     uptimeSec: Math.round(process.uptime()),
     startedAt: startedAt.toISOString(),
     migration: startupState.migration,
@@ -187,7 +187,7 @@ app.get('/ready', asyncHandler(async (_req, res) => {
   res.status(ready ? 200 : 503).json({
     ok: ready,
     name: 'TONKET',
-    version: '1.2.0-candles',
+    version: '1.2.1-grayfix',
     dbOk,
     dbTime: db,
     migration: startupState.migration,
