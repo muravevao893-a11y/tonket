@@ -133,3 +133,45 @@ npm run start
 apps/api   Express backend, migrations, TON adapters
 apps/web   React Telegram Mini App frontend
 ```
+
+## Railway healthcheck hotfix notes
+
+This archive contains `1.1.1-railway-hotfix`.
+
+What changed:
+
+- `/health` is now a pure liveness endpoint and does not depend on PostgreSQL.
+- New `/ready` endpoint checks PostgreSQL, migrations and config warnings.
+- The server binds explicitly to `0.0.0.0:$PORT` for Railway.
+- Migrations run after the HTTP server starts, so Railway does not kill the app while Postgres is waking up.
+- `DATABASE_URL` is lazy-loaded, so a missing variable no longer prevents the health endpoint from starting.
+- Removed the generated `package-lock.json` from the archive because it may contain environment-specific package URLs. Railway will generate a fresh lock from the public npm registry.
+- Added `.npmrc` with `registry=https://registry.npmjs.org/`.
+
+If Railway still fails, open **Deploy Logs**, not Build Logs. Build Logs only show the healthcheck attempts; Deploy Logs show the real Node.js crash.
+
+Railway variables minimum:
+
+```env
+NODE_ENV=production
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+APP_SECRET=put_64_random_chars_here
+TELEGRAM_BOT_TOKEN=123456:bot_token
+PUBLIC_APP_URL=https://your-service.up.railway.app
+CORS_ORIGIN=https://your-service.up.railway.app
+ALLOW_DEV_AUTH=false
+TON_NETWORK=mainnet
+PLATFORM_TON_ADDRESS=UQ_or_EQ_address
+PLATFORM_ADMIN_TON_ADDRESS=UQ_or_EQ_address
+PLATFORM_FEE_BPS=100
+JETTON_METADATA_BASE_URL=https://your-service.up.railway.app/api/jetton/metadata
+```
+
+After deployment:
+
+```text
+https://your-service.up.railway.app/health
+https://your-service.up.railway.app/ready
+```
+
+`/health` should be 200. `/ready` becomes 200 after PostgreSQL and migrations are OK.

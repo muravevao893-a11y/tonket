@@ -8,7 +8,7 @@ import pino from 'pino';
 import pinoHttp from 'pino-http';
 import { z } from 'zod';
 import { migrate } from './migrate.js';
-import { query, withTransaction, closePool } from './db/pool.js';
+import { query, withTransaction, closePool, hasDatabaseUrl } from './db/pool.js';
 import { verifyTelegramInitData, getDevTelegramUser } from './auth/telegram.js';
 import { createSession, requireAuth } from './auth/session.js';
 import { publicUser, upsertTelegramUser } from './services/users.js';
@@ -24,6 +24,12 @@ import { createStonFiGraduationDraft } from './ton/stonfiAdapter.js';
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const app = express();
 const port = Number(process.env.PORT || 8080);
+const host = process.env.HOST || '0.0.0.0';
+const startedAt = new Date();
+const startupState = {
+  migration: 'not_started',
+  migrationError: null,
+};
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../../web/dist');
 
@@ -69,10 +75,17 @@ function envPublicUrl() {
   return (process.env.PUBLIC_APP_URL || `http://localhost:${port}`).replace(/\/$/, '');
 }
 
-function ensureAppSecret() {
+function getConfigWarnings() {
+  const warnings = [];
+  if (!hasDatabaseUrl()) warnings.push('DATABASE_URL is missing');
   if (process.env.NODE_ENV === 'production' && (!process.env.APP_SECRET || process.env.APP_SECRET.length < 32)) {
-    throw new Error('APP_SECRET must be at least 32 chars in production');
+    warnings.push('APP_SECRET should be at least 32 chars in production');
   }
+  if (process.env.NODE_ENV === 'production' && !process.env.TELEGRAM_BOT_TOKEN) {
+    warnings.push('TELEGRAM_BOT_TOKEN is missing; Telegram auth will fail');
+  }
+  if (!process.env.PLATFORM_TON_ADDRESS) warnings.push('PLATFORM_TON_ADDRESS is missing; trade preparation will fail');
+  return warnings;
 }
 
 async function getBootstrapPayload(userRow) {
@@ -142,9 +155,44 @@ async function maybeGraduate(client, token) {
   return event.rows[0];
 }
 
-app.get('/health', asyncHandler(async (_req, res) => {
-  const db = await query('SELECT now() AS now');
-  res.json({ ok: true, name: 'TONKET', dbTime: db.rows[0].now, version: '1.1.0' });
+// Railway healthcheck must be a fast liveness probe.
+// Do not depend on PostgreSQL here: if DATABASE_URL is wrong, Railway would kill
+// the replica before you can even open logs. Use /ready for DB/config checks.
+app.get('/health', (_req, res) => {
+  res.json({
+    ok: true,
+    name: 'TONKET',
+    version: '1.1.1-railway-hotfix',
+    uptimeSec: Math.round(process.uptime()),
+    startedAt: startedAt.toISOString(),
+    migration: startupState.migration,
+  });
+});
+
+app.get('/ready', asyncHandler(async (_req, res) => {
+  const warnings = getConfigWarnings();
+  let db = null;
+  let dbOk = false;
+
+  try {
+    const result = await query('SELECT now() AS now');
+    db = result.rows[0].now;
+    dbOk = true;
+  } catch (error) {
+    warnings.push(`Database is not ready: ${error.message}`);
+  }
+
+  const ready = dbOk && startupState.migration === 'done' && startupState.migrationError === null;
+  res.status(ready ? 200 : 503).json({
+    ok: ready,
+    name: 'TONKET',
+    version: '1.1.1-railway-hotfix',
+    dbOk,
+    dbTime: db,
+    migration: startupState.migration,
+    migrationError: startupState.migrationError,
+    warnings,
+  });
 }));
 
 app.get('/tonconnect-manifest.json', (_req, res) => {
@@ -515,9 +563,28 @@ app.use((error, _req, res, _next) => {
 });
 
 async function main() {
-  ensureAppSecret();
-  await migrate();
-  const server = app.listen(port, () => logger.info(`TONKET listening on :${port}`));
+  const warnings = getConfigWarnings();
+  for (const warning of warnings) logger.warn({ warning }, 'configuration warning');
+
+  const server = app.listen(port, host, () => {
+    logger.info({ host, port }, `TONKET listening on ${host}:${port}`);
+  });
+
+  // Run migrations after binding the port so Railway healthcheck can pass even
+  // while PostgreSQL is waking up. API routes will still report DB errors until
+  // /ready is healthy.
+  startupState.migration = 'running';
+  migrate()
+    .then(() => {
+      startupState.migration = 'done';
+      startupState.migrationError = null;
+      logger.info('database migrations finished');
+    })
+    .catch((error) => {
+      startupState.migration = 'failed';
+      startupState.migrationError = error.message;
+      logger.error(error, 'database migrations failed');
+    });
 
   const shutdown = async () => {
     server.close(async () => {
@@ -530,6 +597,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  logger.error(error);
+  logger.error(error, 'fatal startup error');
   process.exit(1);
 });

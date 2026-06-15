@@ -2,23 +2,44 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is required');
+let poolInstance = null;
+
+function getDatabaseUrl() {
+  const url = process.env.DATABASE_URL;
+  if (!url || !url.trim()) {
+    throw new Error('DATABASE_URL is required. Add a PostgreSQL database to Railway and set DATABASE_URL=${{Postgres.DATABASE_URL}}.');
+  }
+  return url.trim();
 }
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
-  max: Number(process.env.PG_POOL_MAX || 10),
-  idleTimeoutMillis: 30_000,
-});
+export function hasDatabaseUrl() {
+  return Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim());
+}
+
+export function getPool() {
+  if (poolInstance) return poolInstance;
+
+  poolInstance = new Pool({
+    connectionString: getDatabaseUrl(),
+    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+    max: Number(process.env.PG_POOL_MAX || 10),
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS || 10_000),
+  });
+
+  poolInstance.on('error', (error) => {
+    console.error('[postgres] idle client error', error);
+  });
+
+  return poolInstance;
+}
 
 export async function query(text, params = []) {
-  return pool.query(text, params);
+  return getPool().query(text, params);
 }
 
 export async function withTransaction(fn) {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     const result = await fn(client);
@@ -33,5 +54,7 @@ export async function withTransaction(fn) {
 }
 
 export async function closePool() {
-  await pool.end();
+  if (!poolInstance) return;
+  await poolInstance.end();
+  poolInstance = null;
 }

@@ -2,13 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
-import { pool } from './db/pool.js';
+import { getPool } from './db/pool.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.resolve(__dirname, '../migrations');
 
 export async function migrate() {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     await client.query(`
@@ -41,11 +41,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   migrate()
     .then(async () => {
       console.log('[migrate] done');
-      await pool.end();
+      await getPool().end();
     })
     .catch(async (error) => {
       console.error(error);
-      await pool.end();
+      await getPool().end();
       process.exit(1);
     });
 }
