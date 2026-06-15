@@ -163,7 +163,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     name: 'TONKET',
-    version: '1.2.1-grayfix',
+    version: '1.2.2-tma-blankfix',
     uptimeSec: Math.round(process.uptime()),
     startedAt: startedAt.toISOString(),
     migration: startupState.migration,
@@ -187,7 +187,7 @@ app.get('/ready', asyncHandler(async (_req, res) => {
   res.status(ready ? 200 : 503).json({
     ok: ready,
     name: 'TONKET',
-    version: '1.2.1-grayfix',
+    version: '1.2.2-tma-blankfix',
     dbOk,
     dbTime: db,
     migration: startupState.migration,
@@ -565,8 +565,34 @@ app.post('/api/trades/:id/confirm', requireAuth, asyncHandler(async (req, res) =
   res.json({ token: tokenToPublic(output.token), graduation: output.graduation });
 }));
 
-app.use(express.static(webDist, { fallthrough: true }));
+
+app.get('/favicon.ico', (_req, res) => {
+  res.sendFile(path.join(webDist, 'icon.svg'));
+});
+
+app.use((req, res, next) => {
+  const acceptsHtml = (req.headers.accept || '').includes('text/html');
+  if (req.path === '/' || acceptsHtml) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
+app.use(express.static(webDist, {
+  fallthrough: true,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store');
+    } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+}));
+
 app.get('*', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.sendFile(path.join(webDist, 'index.html'));
 });
 

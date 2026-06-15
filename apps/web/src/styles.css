@@ -11,9 +11,19 @@
 html,
 body,
 #root {
+  height: 100%;
   min-height: 100%;
   margin: 0;
   background: #0f0f13;
+}
+
+body {
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+#root {
+  overflow: hidden;
 }
 
 * {

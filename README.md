@@ -1,76 +1,64 @@
-# TONKET — Railway + Telegram frontend gray-screen hotfix
+# TONKET — TMA Blank Screen Fix
 
-Этот архив — hotfix поверх `tonket-candles-ready`.
+Railway-ready fullstack Telegram Mini App with backend-driven token list, Telegram auth, TonConnect, Jetton deploy adapter, OHLCV candles and a safer frontend boot process.
 
-Что исправлено:
+## What this hotfix changes
 
-- Добавлен официальный Telegram WebApp script в `apps/web/index.html`:
-  `https://telegram.org/js/telegram-web-app.js`
-- Добавлен React ErrorBoundary. Если фронт падает, Mini App теперь показывает ошибку, а не серый экран.
-- Добавлен boot diagnostics экран: `/health`, `/ready`, Telegram WebApp object, initData, origin.
-- API-клиент теперь явно ловит ситуацию, когда backend вместо JSON возвращает HTML `index.html`.
-- Добавлен timeout API-запросов.
-- React переведен на стабильную ветку `18.3.1`, чтобы снизить риск конфликтов с WebView/TonConnect.
-- Исправлен stale-state баг при синхронизации кошелька.
+- Adds a visible HTML bootloader inside `#root`, so Telegram will never show a silent gray screen if the JS bundle fails.
+- Adds global `window.onerror` and `unhandledrejection` handlers before React starts.
+- Changes `main.tsx` to dynamically import the app and render a fatal boot screen if module loading fails.
+- Adds `height: 100%` / `overflow` fixes for Telegram WebView.
+- Adds Vite `build.target = es2018` for safer Telegram WebView compatibility.
+- Adds `/favicon.ico` and no-cache headers for HTML, so Telegram/Railway do not keep stale broken frontend HTML.
+- Keeps `/health` fast and `/ready` for DB/config checks.
 
-## Локальный запуск
+## Local run
 
 ```bash
 cp .env.example .env
-```
+# for local browser testing only
+# ALLOW_DEV_AUTH=true
 
-Для локального браузера поставь:
-
-```env
-ALLOW_DEV_AUTH=true
-```
-
-Запуск:
-
-```bash
 docker compose up --build
 ```
 
-Открыть:
+Open:
 
 ```text
 http://localhost:8080
 ```
 
-## Railway
+## Railway deploy
 
-Обязательные переменные:
+Required variables:
 
 ```env
 NODE_ENV=production
 DATABASE_URL=${{Postgres.DATABASE_URL}}
-APP_SECRET=длинный_секрет_минимум_32_символа
-TELEGRAM_BOT_TOKEN=токен_бота
-PUBLIC_APP_URL=https://твой-домен.up.railway.app
-CORS_ORIGIN=https://твой-домен.up.railway.app
+APP_SECRET=long_random_secret_at_least_32_chars
+TELEGRAM_BOT_TOKEN=your_bot_token
+PUBLIC_APP_URL=https://your-domain.up.railway.app
+CORS_ORIGIN=https://your-domain.up.railway.app
 ALLOW_DEV_AUTH=false
 TON_NETWORK=mainnet
-PLATFORM_TON_ADDRESS=UQ_или_EQ_адрес
-PLATFORM_ADMIN_TON_ADDRESS=UQ_или_EQ_адрес
+PLATFORM_TON_ADDRESS=UQ_or_EQ_address
+PLATFORM_ADMIN_TON_ADDRESS=UQ_or_EQ_address
 PLATFORM_FEE_BPS=100
-JETTON_METADATA_BASE_URL=https://твой-домен.up.railway.app/api/jetton/metadata
+JETTON_METADATA_BASE_URL=https://your-domain.up.railway.app/api/jetton/metadata
+JETTON_MASTER_CODE_BOC_BASE64=...
+JETTON_WALLET_CODE_BOC_BASE64=...
 ```
 
-После деплоя проверь:
+After deploy check:
 
 ```text
-https://твой-домен.up.railway.app/health
-https://твой-домен.up.railway.app/ready
+https://your-domain.up.railway.app/health
+https://your-domain.up.railway.app/ready
 ```
 
-Если `/health` зелёный, а `/ready` красный — фронт живой, проблема в PostgreSQL/env.
+## Telegram checklist
 
-## Важно для Telegram Mini App
-
-В BotFather нужно указать Web App URL именно на Railway-домен:
-
-```text
-https://твой-домен.up.railway.app
-```
-
-Открывать нужно через кнопку Mini App/бота. Если просто вставить ссылку в браузер Telegram, `initData` может не прийти.
+1. BotFather → `/setmenubutton` or `/newapp` must point to your current Railway URL.
+2. The URL must be HTTPS.
+3. `PUBLIC_APP_URL` and `CORS_ORIGIN` must match the same Railway domain.
+4. If Telegram still shows old UI, change the URL query once, for example `https://your-domain.up.railway.app/?v=2`, because Telegram clients cache web apps aggressively.
