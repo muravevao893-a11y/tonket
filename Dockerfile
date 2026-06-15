@@ -1,20 +1,21 @@
-FROM python:3.12-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
+FROM node:20-alpine AS deps
 WORKDIR /app
+COPY package.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm install
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    fontconfig \
-    fonts-dejavu-core \
-    && fc-cache -f -v \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+FROM deps AS build
+WORKDIR /app
 COPY . .
+RUN npm run build && npm prune --omit=dev
 
-CMD ["python", "-m", "app.main"]
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/apps/api ./apps/api
+COPY --from=build /app/apps/web/dist ./apps/web/dist
+EXPOSE 8080
+CMD ["npm", "run", "start"]
