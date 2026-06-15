@@ -1,0 +1,21 @@
+{
+  "name": "tonket-railway",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace apps/api run dev",
+    "dev:web": "npm --workspace apps/web run dev",
+    "build": "npm --workspace apps/web run build",
+    "start": "npm --workspace apps/api run start",
+    "migrate": "npm --workspace apps/api run migrate",
+    "test:curve": "npm --workspace apps/api run test:curve"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
