@@ -1,6 +1,6 @@
 {
   "name": "@tonket/web",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
   "dependencies": {
     "@tonconnect/ui-react": "^2.0.9",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "lightweight-charts": "^5.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.7",

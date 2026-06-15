@@ -16,6 +16,7 @@ import { getPrimaryWallet, publicWallet, upsertWallet, createWalletNonce } from 
 import { HttpError, badRequest, notFound, forbidden } from './services/errors.js';
 import { parseTonToNano, parseTokenAmount, quoteBuy, quoteSell, quoteToPublic } from './services/bondingCurve.js';
 import { tokenToPublic, getTokenById } from './services/tokens.js';
+import { getCandles, normalizeInterval, tokenToLiveTick, upsertTradeCandles } from './services/candles.js';
 import { buildCommentPayload, buildTonConnectTransaction } from './ton/tonConnect.js';
 import { buildJettonDeployPlan, getJettonDeployConfigStatus } from './ton/jettonDeployer.js';
 import { verifyTonTransaction } from './ton/chainVerifier.js';
@@ -162,7 +163,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     name: 'TONKET',
-    version: '1.1.1-railway-hotfix',
+    version: '1.2.0-candles',
     uptimeSec: Math.round(process.uptime()),
     startedAt: startedAt.toISOString(),
     migration: startupState.migration,
@@ -186,7 +187,7 @@ app.get('/ready', asyncHandler(async (_req, res) => {
   res.status(ready ? 200 : 503).json({
     ok: ready,
     name: 'TONKET',
-    version: '1.1.1-railway-hotfix',
+    version: '1.2.0-candles',
     dbOk,
     dbTime: db,
     migration: startupState.migration,
@@ -280,6 +281,23 @@ app.get('/api/tokens/:id', requireAuth, asyncHandler(async (req, res) => {
   );
   if (result.rowCount === 0) throw notFound('Token not found');
   res.json({ token: tokenToPublic(result.rows[0], result.rows[0].holder_count) });
+}));
+
+app.get('/api/tokens/:id/candles', requireAuth, asyncHandler(async (req, res) => {
+  const interval = normalizeInterval(req.query.interval);
+  const limit = Math.max(1, Math.min(Number(req.query.limit || 250), 1000));
+
+  const token = await getTokenById({ query }, req.params.id, false);
+  if (!token) throw notFound('Token not found');
+
+  const candles = await getCandles({ query }, token.id, { interval, limit });
+  res.json({ interval, limit, candles });
+}));
+
+app.get('/api/tokens/:id/tick', requireAuth, asyncHandler(async (req, res) => {
+  const token = await getTokenById({ query }, req.params.id, false);
+  if (!token) throw notFound('Token not found');
+  res.json({ tick: tokenToLiveTick(token) });
 }));
 
 app.get('/api/jetton/metadata/:id.json', asyncHandler(async (req, res) => {
@@ -538,6 +556,7 @@ app.post('/api/trades/:id/confirm', requireAuth, asyncHandler(async (req, res) =
       `INSERT INTO price_snapshots (token_id, price_nano, supply_atomic, raised_ton_nano) VALUES ($1,$2,$3,$4)`,
       [token.id, trade.price_end_nano, updatedToken.current_supply_atomic, updatedToken.raised_ton_nano],
     );
+    await upsertTradeCandles(client, trade, new Date());
     const graduation = await maybeGraduate(client, updatedToken);
     const finalToken = await getTokenById(client, token.id, false);
     return { token: finalToken, graduation };

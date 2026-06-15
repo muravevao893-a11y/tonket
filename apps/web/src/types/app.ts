@@ -1,3 +1,23 @@
+
+export type CandleInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+
+export type CandlePoint = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volumeTon?: string;
+  volumeTokenAtomic?: string;
+  tradesCount?: number;
+};
+
+export type LiveTickPoint = {
+  time: number;
+  price: number;
+  priceTon?: string;
+};
+
 export type UserProfile = {
   id: string;
   telegramId: string;

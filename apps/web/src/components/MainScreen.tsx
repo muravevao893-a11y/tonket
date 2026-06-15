@@ -4,6 +4,7 @@ import type { BootstrapPayload, TokenItem } from '../types/app';
 import { activateToken, authTelegram, clearSessionToken, confirmDeploy, confirmTrade, connectWallet, createToken, fetchBootstrap, getSessionToken, prepareTrade, type CreateTokenInput } from '../lib/api';
 import { HomeIcon, PlusIcon, ProfileIcon, RocketIcon, SearchIcon, TonLogo } from './icons';
 import { Button, cn, haptic, shortAddress, StatPill, StatusBadge } from './ui';
+import { TokenDetailSheet } from './TokenDetailSheet';
 
 type TabKey = 'home' | 'launch' | 'search' | 'profile';
 type SortKey = 'hot' | 'new' | 'graduating';
@@ -49,9 +50,9 @@ function BottomTab({ label, active, onClick, icon }: { label: string; active: bo
   );
 }
 
-function TokenCard({ token, onBuy }: { token: TokenItem; onBuy: (token: TokenItem) => void }) {
+function TokenCard({ token, onBuy, onOpen }: { token: TokenItem; onBuy: (token: TokenItem) => void; onOpen: (token: TokenItem) => void }) {
   return (
-    <article className="group rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-card transition-all duration-300 ease-in-out hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-800/90 active:scale-[0.98]">
+    <article onClick={() => onOpen(token)} className="group cursor-pointer rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-card transition-all duration-300 ease-in-out hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-800/90 active:scale-[0.98]">
       <div className="flex items-start gap-3">
         <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-white/10 bg-slate-950 text-3xl shadow-inner">
           {token.imageUrl ? <img src={token.imageUrl} alt="" className="h-full w-full object-cover" /> : <span aria-hidden="true">{avatarFallback(token)}</span>}
@@ -92,14 +93,29 @@ function TokenCard({ token, onBuy }: { token: TokenItem; onBuy: (token: TokenIte
           <div className="min-w-0 text-xs text-slate-500">
             <span>💧 {token.raisedTon}/{token.targetLiquidityTon} TON</span>
           </div>
-          <Button
-            type="button"
-            disabled={token.status !== 'funding'}
-            onClick={() => onBuy(token)}
-            className="bg-blue-600 px-4 py-2 text-xs text-white shadow-glow hover:bg-blue-500"
-          >
-            Buy
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen(token);
+              }}
+              className="bg-slate-800 px-4 py-2 text-xs text-slate-200 hover:bg-slate-700"
+            >
+              Chart
+            </Button>
+            <Button
+              type="button"
+              disabled={token.status !== 'funding'}
+              onClick={(event) => {
+                event.stopPropagation();
+                onBuy(token);
+              }}
+              className="bg-blue-600 px-4 py-2 text-xs text-white shadow-glow hover:bg-blue-500"
+            >
+              Buy
+            </Button>
+          </div>
         </div>
       </div>
     </article>
@@ -180,6 +196,7 @@ export default function MainScreen() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [buyToken, setBuyToken] = useState<TokenItem | null>(null);
+  const [detailToken, setDetailToken] = useState<TokenItem | null>(null);
 
   const tokens = data?.tokens || [];
   const tgInitData = window.Telegram?.WebApp?.initData || '';
@@ -280,20 +297,20 @@ export default function MainScreen() {
     }
   }
 
-  async function handleBuy(token: TokenItem, amount: string) {
+  async function handleTrade(token: TokenItem, side: 'buy' | 'sell', amount: string) {
     if (!tonAddress) {
       showToast('error', 'Connect TON wallet first');
       return;
     }
     setBusy(true);
     try {
-      const prepared = await prepareTrade({ tokenId: token.id, side: 'buy', amount, walletAddress: tonAddress });
+      const prepared = await prepareTrade({ tokenId: token.id, side, amount, walletAddress: tonAddress });
       const result = await tonConnectUI.sendTransaction(prepared.transaction);
       const txHash = JSON.stringify(result).slice(0, 240);
       const confirmed = await confirmTrade(prepared.tradeId, txHash);
       setData((current) => current ? { ...current, tokens: current.tokens.map((item) => item.id === token.id ? confirmed.token : item) } : current);
       setBuyToken(null);
-      showToast('success', `Bought ${amount} ${token.ticker}`);
+      showToast('success', `${side === 'buy' ? 'Bought' : 'Sold'} ${amount} ${token.ticker}`);
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Trade failed');
     } finally {
@@ -381,7 +398,7 @@ export default function MainScreen() {
                   </div>
                 ) : sortedTokens.map((token) => (
                   <div key={token.id}>
-                    <TokenCard token={token} onBuy={setBuyToken} />
+                    <TokenCard token={token} onBuy={setBuyToken} onOpen={setDetailToken} />
                     {(token.status === 'deploy_submitted' || token.status === 'awaiting_deploy') && token.jettonMasterAddress && (
                       <Button disabled={busy} onClick={() => handleActivate(token)} className="mt-2 w-full bg-emerald-600 text-white hover:bg-emerald-500">Activate funding for ${token.ticker}</Button>
                     )}
@@ -398,7 +415,7 @@ export default function MainScreen() {
               <h2 className="text-xl font-black text-white">Search</h2>
               <p className="mt-2 text-sm text-slate-500">Search endpoint не мокал — пока фильтруем backend tokens локально. Следующий шаг: добавить `/api/tokens?search=` и индексы по ticker/name.</p>
               <div className="mt-4 grid gap-3">
-                {tokens.slice(0, 5).map((token) => <TokenCard key={token.id} token={token} onBuy={setBuyToken} />)}
+                {tokens.slice(0, 5).map((token) => <TokenCard key={token.id} token={token} onBuy={setBuyToken} onOpen={setDetailToken} />)}
               </div>
             </div>
           )}
@@ -439,7 +456,8 @@ export default function MainScreen() {
         <PlusIcon />
       </button>
 
-      <BuySheet token={buyToken} walletAddress={walletAddress} busy={busy} onClose={() => setBuyToken(null)} onBuy={handleBuy} />
+      <BuySheet token={buyToken} walletAddress={walletAddress} busy={busy} onClose={() => setBuyToken(null)} onBuy={(token, amount) => handleTrade(token, 'buy', amount)} />
+      <TokenDetailSheet token={detailToken} walletAddress={walletAddress} busy={busy} onClose={() => setDetailToken(null)} onTrade={handleTrade} />
     </main>
   );
 }

@@ -1,4 +1,4 @@
-import type { ApiError, BootstrapPayload, TokenItem, WalletProfile } from '../types/app';
+import type { ApiError, BootstrapPayload, CandleInterval, CandlePoint, LiveTickPoint, TokenItem, WalletProfile } from '../types/app';
 
 const TOKEN_KEY = 'tonket.sessionToken';
 
@@ -112,4 +112,14 @@ export function confirmTrade(tradeId: string, txHash: string) {
     method: 'POST',
     body: JSON.stringify({ txHash }),
   });
+}
+
+
+export function fetchCandles(tokenId: string, interval: CandleInterval = '1m', limit = 250) {
+  const params = new URLSearchParams({ interval, limit: String(limit) });
+  return request<{ interval: CandleInterval; limit: number; candles: CandlePoint[] }>(`/api/tokens/${tokenId}/candles?${params.toString()}`);
+}
+
+export function fetchLiveTick(tokenId: string) {
+  return request<{ tick: LiveTickPoint }>(`/api/tokens/${tokenId}/tick`);
 }
